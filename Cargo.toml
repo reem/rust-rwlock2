@@ -1,10 +1,10 @@
 [package]
 
 name = "rwlock2"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Jonathan Reem <jonathan.reem@gmail.com>"]
 repository = "https://github.com/reem/rust-rwlock2.git"
-description = ""
+description = "A temporary fork of std::sync::RwLock with new APIs."
 readme = "README.md"
 license = "MIT"
 
