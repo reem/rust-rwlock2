@@ -14,6 +14,9 @@
 
 extern crate libc;
 
+#[cfg(test)]
+extern crate rand;
+
 mod rwlock;
 mod poison;
 mod cross;

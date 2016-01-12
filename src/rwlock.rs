@@ -313,11 +313,11 @@ impl<'rwlock, T: ?Sized> RwLockReadGuard<'rwlock, T> {
     /// guard referencing the borrow returned by the closure.
     ///
     /// ```rust
-    /// # use std::sync::RwLock;
+    /// # use rwlock2::RwLock;
     /// let x = RwLock::new(vec![1, 2]);
     ///
-    /// let y = x.read().map(|v| &v[0]);
-    /// assert_eq!(y, 1);
+    /// let y = x.read().unwrap().map(|v| &v[0]);
+    /// assert_eq!(*y, 1);
     /// ```
     pub fn map<U: ?Sized, F>(self, cb: F) -> RwLockReadGuard<'rwlock, U>
     where F: FnOnce(&'rwlock T) -> &'rwlock U {
@@ -376,15 +376,14 @@ impl<'a, T: ?Sized> Drop for RwLockWriteGuard<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(deprecated)] // rand
-
-    use prelude::v1::*;
-
     use rand::{self, Rng};
-    use sync::mpsc::channel;
-    use thread;
-    use sync::{Arc, RwLock, StaticRwLock, TryLockError};
-    use sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc::channel;
+    use std::thread;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use poison::TryLockError;
+    use super::RwLock;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -399,31 +398,23 @@ mod tests {
     }
 
     #[test]
-    fn static_smoke() {
-        static R: StaticRwLock = StaticRwLock::new();
-        drop(R.read().unwrap());
-        drop(R.write().unwrap());
-        drop((R.read().unwrap(), R.read().unwrap()));
-        drop(R.write().unwrap());
-        unsafe { R.destroy(); }
-    }
-
-    #[test]
     fn frob() {
-        static R: StaticRwLock = StaticRwLock::new();
         const N: usize = 10;
         const M: usize = 1000;
+
+        let r = Arc::new(RwLock::new(()));
 
         let (tx, rx) = channel::<()>();
         for _ in 0..N {
             let tx = tx.clone();
+            let r = r.clone();
             thread::spawn(move|| {
                 let mut rng = rand::thread_rng();
                 for _ in 0..M {
-                    if rng.gen_weighted_bool(N) {
-                        drop(R.write().unwrap());
+                    if rng.gen_weighted_bool(N as u32) {
+                        drop(r.write().unwrap());
                     } else {
-                        drop(R.read().unwrap());
+                        drop(r.read().unwrap());
                     }
                 }
                 drop(tx);
@@ -431,7 +422,6 @@ mod tests {
         }
         drop(tx);
         let _ = rx.recv();
-        unsafe { R.destroy(); }
     }
 
     #[test]
@@ -554,8 +544,6 @@ mod tests {
 
     #[test]
     fn test_rwlock_try_write() {
-        use mem::drop;
-
         let lock = RwLock::new(0isize);
         let read_guard = lock.read().unwrap();
 
