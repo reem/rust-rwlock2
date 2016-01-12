@@ -8,11 +8,10 @@
 //!
 //! When these methods land in std, this crate will be obsolete.
 //!
-//! Original documentation below:
-//!
-//!
 
 extern crate libc;
+extern crate winapi;
+extern crate kernel32;
 
 #[cfg(test)]
 extern crate rand;
