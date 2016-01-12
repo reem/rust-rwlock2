@@ -9,7 +9,7 @@
 // except according to those terms.
 
 use std::cell::UnsafeCell;
-use winapi::synchapi::{SRWLOCK, SRWLOCK_INIT};
+use winapi::{SRWLOCK, RTL_SRWLOCK_INIT};
 use kernel32;
 
 pub struct RWLock { inner: UnsafeCell<SRWLOCK> }
@@ -18,8 +18,8 @@ unsafe impl Send for RWLock {}
 unsafe impl Sync for RWLock {}
 
 impl RWLock {
-    pub const fn new() -> RWLock {
-        RWLock { inner: UnsafeCell::new(SRWLOCK_INIT) }
+    pub fn new() -> RWLock {
+        RWLock { inner: UnsafeCell::new(RTL_SRWLOCK_INIT) }
     }
     #[inline]
     pub unsafe fn read(&self) {
