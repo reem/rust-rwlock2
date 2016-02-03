@@ -340,24 +340,33 @@ impl<'mutex, T: ?Sized> MutexGuard<'mutex, T> {
     pub fn map<U: ?Sized, F>(this: Self, cb: F) -> MutexGuard<'mutex, U>
         where F: FnOnce(&'mutex mut T) -> &'mutex mut U
     {
+        MutexGuard::filter_map(this, move |x| Ok::<_, ()>(cb(x))).unwrap()
+    }
+
+    /// Conditionally get a new guard to a sub-borrow depending on the original
+    /// contents of the guard.
+    pub fn filter_map<U: ?Sized, E, F>(this: Self, cb: F) -> Result<MutexGuard<'mutex, U>, E>
+        where F: FnOnce(&'mutex mut T) -> Result<&'mutex mut U, E>
+    {
         // Compute the new data while still owning the original lock
         // in order to correctly poison if the callback panics.
         let data = unsafe { ptr::read(&this.__data) };
-        let new_data = cb(data);
 
-        // We don't want to unlock the lock by running the destructor of the
-        // original lock, so just read the fields we need and forget it.
-        let (poison, lock) = unsafe {
-            (ptr::read(&this.__poison), ptr::read(&this.__lock))
-        };
-        mem::forget(this);
+        cb(data).map(|new_data| {
+            // We don't want to unlock the lock by running the destructor of the
+            // original lock, so just read the fields we need and forget it.
+            let (poison, lock) = unsafe {
+                (ptr::read(&this.__poison), ptr::read(&this.__lock))
+            };
+            mem::forget(this);
 
-        MutexGuard {
-            __lock: lock,
-            __data: new_data,
-            __poison: poison,
-            __marker: NoSend(PhantomData)
-        }
+            MutexGuard {
+                __lock: lock,
+                __data: new_data,
+                __poison: poison,
+                __marker: NoSend(PhantomData)
+            }
+        })
     }
 }
 
