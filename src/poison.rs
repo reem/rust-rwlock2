@@ -115,12 +115,15 @@ impl<T> PoisonError<T> {
 
     /// Consumes this error indicating that a lock is poisoned, returning the
     /// underlying guard to allow access regardless.
-    #[cfg(test)]
     pub fn into_inner(self) -> T { self.guard }
 
     /// Reaches into this error indicating that a lock is poisoned, returning a
     /// reference to the underlying guard to allow access regardless.
     pub fn get_ref(&self) -> &T { &self.guard }
+
+    /// Reaches into this error indicating that a lock is poisoned, returning a
+    /// reference to the underlying guard to allow access regardless.
+    pub fn get_mut(&mut self) -> &mut T { &mut self.guard }
 }
 
 impl<T> From<PoisonError<T>> for TryLockError<T> {

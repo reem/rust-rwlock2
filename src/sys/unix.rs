@@ -80,3 +80,102 @@ impl RWLock {
         }
     }
 }
+
+pub struct Mutex { inner: UnsafeCell<libc::pthread_mutex_t> }
+
+#[inline]
+pub unsafe fn raw(m: &Mutex) -> *mut libc::pthread_mutex_t {
+    m.inner.get()
+}
+
+unsafe impl Send for Mutex {}
+unsafe impl Sync for Mutex {}
+
+#[allow(dead_code)] // sys isn't exported yet
+impl Mutex {
+    pub fn new() -> Mutex {
+        // Might be moved and address is changing it is better to avoid
+        // initialization of potentially opaque OS data before it landed
+        Mutex { inner: UnsafeCell::new(libc::PTHREAD_MUTEX_INITIALIZER) }
+    }
+    #[inline]
+    pub unsafe fn lock(&self) {
+        let r = libc::pthread_mutex_lock(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+    #[inline]
+    pub unsafe fn unlock(&self) {
+        let r = libc::pthread_mutex_unlock(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+    #[inline]
+    pub unsafe fn try_lock(&self) -> bool {
+        libc::pthread_mutex_trylock(self.inner.get()) == 0
+    }
+    #[inline]
+    #[cfg(not(target_os = "dragonfly"))]
+    pub unsafe fn destroy(&self) {
+        let r = libc::pthread_mutex_destroy(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+    #[inline]
+    #[cfg(target_os = "dragonfly")]
+    pub unsafe fn destroy(&self) {
+        use libc;
+        let r = libc::pthread_mutex_destroy(self.inner.get());
+        // On DragonFly pthread_mutex_destroy() returns EINVAL if called on a
+        // mutex that was just initialized with libc::PTHREAD_MUTEX_INITIALIZER.
+        // Once it is used (locked/unlocked) or pthread_mutex_init() is called,
+        // this behaviour no longer occurs.
+        debug_assert!(r == 0 || r == libc::EINVAL);
+    }
+}
+
+pub struct Condvar { inner: UnsafeCell<libc::pthread_cond_t> }
+
+unsafe impl Send for Condvar {}
+unsafe impl Sync for Condvar {}
+
+impl Condvar {
+    pub fn new() -> Condvar {
+        // Might be moved and address is changing it is better to avoid
+        // initialization of potentially opaque OS data before it landed
+        Condvar { inner: UnsafeCell::new(libc::PTHREAD_COND_INITIALIZER) }
+    }
+
+    #[inline]
+    pub unsafe fn notify_one(&self) {
+        let r = libc::pthread_cond_signal(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+
+    #[inline]
+    pub unsafe fn notify_all(&self) {
+        let r = libc::pthread_cond_broadcast(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+
+    #[inline]
+    pub unsafe fn wait(&self, mutex: &Mutex) {
+        let r = libc::pthread_cond_wait(self.inner.get(), raw(mutex));
+        debug_assert_eq!(r, 0);
+    }
+
+    #[inline]
+    #[cfg(not(target_os = "dragonfly"))]
+    pub unsafe fn destroy(&self) {
+        let r = libc::pthread_cond_destroy(self.inner.get());
+        debug_assert_eq!(r, 0);
+    }
+
+    #[inline]
+    #[cfg(target_os = "dragonfly")]
+    pub unsafe fn destroy(&self) {
+        let r = libc::pthread_cond_destroy(self.inner.get());
+        // On DragonFly pthread_cond_destroy() returns EINVAL if called on
+        // a condvar that was just initialized with
+        // libc::PTHREAD_COND_INITIALIZER. Once it is used or
+        // pthread_cond_init() is called, this behaviour no longer occurs.
+        debug_assert!(r == 0 || r == libc::EINVAL);
+    }
+}

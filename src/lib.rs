@@ -17,9 +17,15 @@ extern crate kernel32;
 extern crate rand;
 
 mod rwlock;
+mod mutex;
+mod condvar;
+
 mod poison;
 mod cross;
 mod sys;
 
+pub use poison::{PoisonError, LockResult, TryLockError, TryLockResult};
 pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use mutex::{Mutex, MutexGuard};
+pub use condvar::{Condvar, WaitTimeoutResult};
 

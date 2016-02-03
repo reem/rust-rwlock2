@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use sys::rwlock as imp;
+use sys::sync as imp;
 
 /// An OS-based reader-writer lock.
 ///
