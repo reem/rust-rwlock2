@@ -1,16 +1,9 @@
 # rwlock2
 
-> 
+> A temporary fork of Mutex, RwLock and Condvar adding some methods.
 
-## Usage
-
-Use the crates.io repository; add this to your `Cargo.toml` along
-with the rest of your dependencies:
-
-```toml
-[dependencies]
-rwlock2 = "*"
-```
+You probably should not use this, just wait for the new methods to land in
+upstream std, but if you really really really want them go for it.
 
 ## Author
 
