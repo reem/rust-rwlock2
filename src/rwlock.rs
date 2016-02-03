@@ -334,6 +334,27 @@ impl<'rwlock, T: ?Sized> RwLockReadGuard<'rwlock, T> {
 
         new
     }
+
+    /// Conditionally get a new guard to a sub-borrow depending on the original
+    /// contents of the guard.
+    pub fn filter_map<U: ?Sized, E, F>(this: Self, cb: F) -> Result<RwLockReadGuard<'rwlock, U>, (Self, E)>
+        where F: FnOnce(&'rwlock T) -> Result<&'rwlock U, E>
+    {
+        match cb(this.__data) {
+            Ok(new_data) => {
+                let new = RwLockReadGuard {
+                    __lock: this.__lock,
+                    __data: new_data,
+                    __marker: marker::PhantomData
+                };
+
+                mem::forget(this);
+
+                Ok(new)
+            },
+            Err(e) => Err((this, e))
+        }
+    }
 }
 
 impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
@@ -389,6 +410,35 @@ impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
             __data: unsafe { mem::transmute::<&mut U, &UnsafeCell<U>>(new_data) },
             __poison: poison,
             __marker: marker::PhantomData
+        }
+    }
+
+    /// Conditionally get a new guard to a sub-borrow depending on the original
+    /// contents of the guard.
+    pub fn filter_map<U: ?Sized, E, F>(this: Self, cb: F) -> Result<RwLockWriteGuard<'rwlock, U>, (Self, E)>
+        where F: FnOnce(&'rwlock mut T) -> Result<&'rwlock mut U, E>
+    {
+        // Compute the new data while still owning the original lock
+        // in order to correctly poison if the callback panics.
+        let data = unsafe { ptr::read(&this.__data) };
+
+        match cb(unsafe { &mut *data.get() }) {
+            Ok(new_data) => {
+                // We don't want to unlock the lock by running the destructor of the
+                // original lock, so just read the fields we need and forget it.
+                let (poison, lock) = unsafe {
+                    (ptr::read(&this.__poison), ptr::read(&this.__lock))
+                };
+                mem::forget(this);
+
+                Ok(RwLockWriteGuard {
+                    __lock: lock,
+                    __data: unsafe { mem::transmute::<&mut U, &UnsafeCell<U>>(new_data) },
+                    __poison: poison,
+                    __marker: marker::PhantomData
+                })
+            },
+            Err(e) => Err((this, e))
         }
     }
 }
