@@ -312,20 +312,27 @@ impl<'rwlock, T: ?Sized> RwLockReadGuard<'rwlock, T> {
     /// Applies the supplied closure to the data, returning a new lock
     /// guard referencing the borrow returned by the closure.
     ///
+    /// # Examples
+    ///
     /// ```rust
-    /// # use rwlock2::RwLock;
+    /// # use rwlock2::{RwLockReadGuard, RwLock};
     /// let x = RwLock::new(vec![1, 2]);
     ///
-    /// let y = x.read().unwrap().map(|v| &v[0]);
+    /// let y = RwLockReadGuard::map(x.read().unwrap(), |v| &v[0]);
     /// assert_eq!(*y, 1);
     /// ```
-    pub fn map<U: ?Sized, F>(self, cb: F) -> RwLockReadGuard<'rwlock, U>
-    where F: FnOnce(&'rwlock T) -> &'rwlock U {
-        RwLockReadGuard {
-            __lock: self.__lock,
-            __data: cb(self.__data),
+    pub fn map<U: ?Sized, F>(this: Self, cb: F) -> RwLockReadGuard<'rwlock, U>
+        where F: FnOnce(&'rwlock T) -> &'rwlock U
+    {
+        let new = RwLockReadGuard {
+            __lock: this.__lock,
+            __data: cb(this.__data),
             __marker: marker::PhantomData
-        }
+        };
+
+        mem::forget(this);
+
+        new
     }
 }
 
@@ -340,6 +347,49 @@ impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
                 __marker: marker::PhantomData
             }
         })
+    }
+
+    /// Transform this guard to hold a sub-borrow of the original data.
+    ///
+    /// Applies the supplied closure to the data, returning a new lock
+    /// guard referencing the borrow returned by the closure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use rwlock2::{RwLockWriteGuard, RwLock};
+    /// let x = RwLock::new(vec![1, 2]);
+    ///
+    /// {
+    ///     let mut y = RwLockWriteGuard::map(x.write().unwrap(), |v| &mut v[0]);
+    ///     assert_eq!(*y, 1);
+    ///
+    ///     *y = 10;
+    /// }
+    ///
+    /// assert_eq!(&**x.read().unwrap(), &[10, 2]);
+    /// ```
+    pub fn map<U: ?Sized, F>(this: Self, cb: F) -> RwLockWriteGuard<'rwlock, U>
+        where F: FnOnce(&'rwlock mut T) -> &'rwlock mut U
+    {
+        // Compute the new data while still owning the original lock
+        // in order to correctly poison if the callback panics.
+        let data = unsafe { ptr::read(&this.__data) };
+        let new_data = cb(unsafe { &mut *data.get() });
+
+        // We don't want to unlock the lock by running the destructor of the
+        // original lock, so just read the fields we need and forget it.
+        let (poison, lock) = unsafe {
+            (ptr::read(&this.__poison), ptr::read(&this.__lock))
+        };
+        mem::forget(this);
+
+        RwLockWriteGuard {
+            __lock: lock,
+            __data: unsafe { mem::transmute::<&mut U, &UnsafeCell<U>>(new_data) },
+            __poison: poison,
+            __marker: marker::PhantomData
+        }
     }
 }
 
